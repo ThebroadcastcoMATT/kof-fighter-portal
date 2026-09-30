@@ -8,7 +8,6 @@
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const store = { get: (k) => { try { return localStorage.getItem(k) || ''; } catch { return ''; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch { /* private mode */ } } };
 
   let fighters = [];
   let bouts = [];
@@ -27,7 +26,6 @@
   const known = (v) => v !== null && v !== undefined && v !== '';
   const photoUrl = (path) => (path ? `${C.url}/storage/v1/object/public/${C.bucket}/${path.split('/').map(encodeURIComponent).join('/')}` : '');
   const byId = (id) => fighters.find((f) => f.id === id);
-  const who = () => $('#who').value.trim();
 
   // What makes a fighter "complete" for the graphics.
   function checks(f) {
@@ -47,13 +45,6 @@
     if (!known(f.wins) && !known(f.losses) && !known(f.draws)) return '';
     if (known(f.wins) && !known(f.losses) && !known(f.draws)) return `${f.wins} wins`;
     return `${f.wins || 0}-${f.losses || 0}-${f.draws || 0}`;
-  }
-  function ago(ts) {
-    const s = (Date.now() - new Date(ts).getTime()) / 1000;
-    if (s < 90) return 'just now';
-    if (s < 3600) return `${Math.round(s / 60)} min ago`;
-    if (s < 86400) return `${Math.round(s / 3600)} h ago`;
-    return new Date(ts).toLocaleDateString();
   }
 
   // ---------- load ----------
@@ -92,7 +83,6 @@
         ${f.nickname ? `<span class="nick">“${esc(f.nickname)}”</span>` : ''}
         <span class="facts">${record(f) ? `<b>${esc(record(f))}</b>` : ''}${esc(f.gym)}${f.country ? ` · ${esc(f.country)}` : ''}</span>
         <span class="checks">${checks(f).map(([n, ok]) => `<span class="chk ${ok ? 'y' : 'n'}">${ok ? '✓' : '✕'} ${n}</span>`).join('')}</span>
-        ${f.updated_by ? `<span class="changed">Last changed by ${esc(f.updated_by)}, ${ago(f.updated_at)}</span>` : ''}
       </div>
       <span class="status ${st}">${{ done: 'Complete', part: 'Needs info', none: 'Nothing yet' }[st]}</span>
     </button>`;
@@ -145,13 +135,6 @@
   $('#scrim').onclick = closeSheet;
   $('#sheet').addEventListener('click', (e) => { if (e.target.closest('[data-close]')) closeSheet(); });
 
-  function needName() {
-    if (who()) return false;
-    toast('Type your name at the top first, so we know who made the change', true);
-    $('#who').focus();
-    return true;
-  }
-
   const num = (v) => (String(v).trim() === '' ? null : Math.max(0, parseInt(v, 10) || 0));
   const codeFor = (country) => { const hit = (window.COUNTRIES || []).find(([n]) => n.toLowerCase() === String(country).trim().toLowerCase()); return hit ? hit[1] : ''; };
 
@@ -203,13 +186,13 @@
       $('#pf', sh).addEventListener('change', async (e) => {
         const file = e.target.files[0];
         e.target.value = '';
-        if (!file || needName()) return;
+        if (!file) return;
         const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
         const path = `raw/${f.id}-${Date.now().toString(36)}.${ext}`;
         toast('Uploading photo…');
         const up = await db.storage.from(C.bucket).upload(path, file, { contentType: file.type || 'image/jpeg' });
         if (up.error) { toast(`Upload failed: ${up.error.message}`, true); return; }
-        const res = await db.from('fn_fighters').update({ photo_raw_path: path, photo_status: 'raw', updated_by: who() }).eq('id', f.id).select().single();
+        const res = await db.from('fn_fighters').update({ photo_raw_path: path, photo_status: 'raw' }).eq('id', f.id).select().single();
         if (res.error) { toast(`Couldn't save: ${res.error.message}`, true); return; }
         Object.assign(f, res.data);
         $('.photo-row .ph', sh).innerHTML = photoHtml(f);
@@ -217,14 +200,13 @@
         load();
       });
       $('#save', sh).onclick = async () => {
-        if (needName()) return;
         const v = Object.fromEntries(new FormData(form));
         if (!v.first.trim() && !v.last.trim()) { toast('A fighter needs a name', true); return; }
         const row = {
           first: v.first.trim(), last: v.last.trim(), nickname: v.nickname.trim(),
           wins: num(v.wins), losses: num(v.losses), draws: num(v.draws), kos: num(v.kos),
           gym: v.gym.trim(), country: v.country.trim(), code: v.code.trim().toUpperCase().slice(0, 3),
-          age: num(v.age), weight: v.weight.trim(), notes: v.notes.trim(), updated_by: who(),
+          age: num(v.age), weight: v.weight.trim(), notes: v.notes.trim(),
         };
         const res = await db.from('fn_fighters').update(row).eq('id', f.id);
         if (res.error) { toast(`Couldn't save: ${res.error.message}`, true); return; }
@@ -265,18 +247,17 @@
     (sh) => {
       const form = $('#bf', sh);
       $('#save', sh).onclick = async () => {
-        if (needName()) return;
         const v = Object.fromEntries(new FormData(form));
         const upsertFighter = async (existing, first, last) => {
           if (!first.trim() && !last.trim()) return existing ? existing.id : null;
           if (existing) {
             if (existing.first !== first.trim() || existing.last !== last.trim()) {
-              const r = await db.from('fn_fighters').update({ first: first.trim(), last: last.trim(), updated_by: who() }).eq('id', existing.id);
+              const r = await db.from('fn_fighters').update({ first: first.trim(), last: last.trim() }).eq('id', existing.id);
               if (r.error) throw r.error;
             }
             return existing.id;
           }
-          const r = await db.from('fn_fighters').insert({ first: first.trim(), last: last.trim(), updated_by: who() }).select().single();
+          const r = await db.from('fn_fighters').insert({ first: first.trim(), last: last.trim() }).select().single();
           if (r.error) throw r.error;
           return r.data.id;
         };
@@ -327,8 +308,6 @@
   });
   $('#search').addEventListener('input', (e) => { query = e.target.value.trim(); render(); });
   $('#addBout').onclick = () => openBout(null);
-  $('#who').value = store.get('fn.who');
-  $('#who').addEventListener('input', (e) => store.set('fn.who', e.target.value.trim()));
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSheet(); });
 
   // Keep the grid fresh while it's open (someone else may be filling it in too).
