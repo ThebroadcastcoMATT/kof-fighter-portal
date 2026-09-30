@@ -1,0 +1,44 @@
+# Cuts out fighter photos uploaded in the portal (background removed, framed and graded to match the card).
+# Runs every 15 minutes; if nothing is waiting it stops after a few seconds.
+name: Cut out new fighter photos
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: photos
+  cancel-in-progress: false
+
+jobs:
+  photos:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Anything to do?
+        id: check
+        run: |
+          n=$(curl -sf "https://zyqahczlvcbfaplckeyi.supabase.co/rest/v1/fn_fighters?photo_status=eq.raw&select=id" \
+            -H "apikey: sb_publishable_NxUXvmtqPOncQRrBkGLMMA_xn9bw4lY" | grep -o '"id"' | wc -l)
+          echo "waiting=$n" >> "$GITHUB_OUTPUT"
+          echo "$n photo(s) waiting"
+      - uses: actions/checkout@v4
+        if: steps.check.outputs.waiting != '0'
+      - uses: actions/setup-python@v5
+        if: steps.check.outputs.waiting != '0'
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: worker/requirements.txt
+      - name: Cache the cut-out model
+        if: steps.check.outputs.waiting != '0'
+        uses: actions/cache@v4
+        with:
+          path: ~/.rembg
+          key: rembg-birefnet-portrait-v1
+      - if: steps.check.outputs.waiting != '0'
+        run: pip install -r worker/requirements.txt
+      - name: Cut out photos
+        if: steps.check.outputs.waiting != '0'
+        run: python worker/worker.py

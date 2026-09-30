@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Knees of Fury · Fighter portal</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#0d0d0f">
+<link rel="icon" href="assets/logo.png">
+<link rel="stylesheet" href="portal.css">
+</head>
+<body>
+<header class="top">
+  <img class="logo" src="assets/logo.png" alt="Knees of Fury">
+  <div class="title"><b>Fighter portal</b><span>Check and fill in every fighter on the card</span></div>
+  <label class="who"><span>Your name</span><input id="who" placeholder="So we know who changed what" autocomplete="name"></label>
+</header>
+
+<section class="summary">
+  <div class="progress">
+    <div class="p-text"><b id="pDone">0</b> of <b id="pTotal">0</b> fighters complete</div>
+    <div class="p-bar"><i id="pBar"></i></div>
+    <div class="p-legend">
+      <span><i class="dot done"></i><b id="nDone">0</b> complete</span>
+      <span><i class="dot part"></i><b id="nPart">0</b> partly done</span>
+      <span><i class="dot none"></i><b id="nNone">0</b> nothing yet</span>
+    </div>
+  </div>
+  <div class="tools">
+    <div class="seg" id="filter">
+      <button data-f="all" class="on">All</button>
+      <button data-f="todo">Needs info</button>
+      <button data-f="done">Complete</button>
+    </div>
+    <input id="search" type="search" placeholder="Search name or gym">
+    <button class="btn" id="addBout">+ Add bout</button>
+  </div>
+  <p class="rule">Complete = <b>photo</b>, <b>record</b> (wins-losses-draws), <b>gym</b> and <b>country</b>. Tap a fighter to fill in the rest.</p>
+</section>
+
+<main id="card"><div class="loading">Loading the card…</div></main>
+
+<div class="scrim" id="scrim"></div>
+<div class="sheet" id="sheet" role="dialog" aria-modal="true"></div>
+<div class="toast" id="toast"></div>
+
+<script src="vendor/supabase-2.117.2.js"></script>
+<script src="config.js"></script>
+<script src="countries.js"></script>
+<script src="portal.js"></script>
+</body>
+</html>
