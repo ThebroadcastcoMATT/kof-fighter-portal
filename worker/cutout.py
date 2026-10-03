@@ -21,11 +21,15 @@ cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface
 def find_face(rgb, alpha):
     gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
     faces = cascade.detectMultiScale(gray, scaleFactor=1.08, minNeighbors=6, minSize=(40, 40))
-    # Keep faces that sit on the cut-out person, in the top half, and take the biggest.
+    # Keep faces that sit on the cut-out person, near the top of the figure (a chest or a shorts
+    # print can pass for a face lower down), and take the biggest.
+    ys = np.where(alpha > 128)[0]
+    top, height = (ys.min(), ys.max() - ys.min()) if len(ys) else (0, rgb.shape[0])
     good = []
     for (x, y, w, h) in faces:
         cx, cy = x + w // 2, y + h // 2
-        if alpha[min(cy, alpha.shape[0] - 1), min(cx, alpha.shape[1] - 1)] > 128 and cy < rgb.shape[0] * 0.6:
+        if (alpha[min(cy, alpha.shape[0] - 1), min(cx, alpha.shape[1] - 1)] > 128 and cy < top + height * 0.22
+                and h < height * 0.25):  # a round logo behind the fighter isn't a face
             good.append((w * h, x, y, w, h))
     if not good:
         return None
@@ -37,6 +41,12 @@ def process(src, dst):
     img = ImageOps.exif_transpose(Image.open(src)).convert('RGB')  # phone photos: respect rotation
     cut = remove(img, session=session, post_process_mask=True)  # RGBA
     rgba = np.array(cut)
+    # Keep only the fighter: drop scraps of background the matting left that don't touch them
+    # (a bag, a flag, a logo on the wall).
+    n, labels, stats, _ = cv2.connectedComponentsWithStats((rgba[:, :, 3] > 24).astype(np.uint8), 8)
+    if n > 2:
+        keep = 1 + int(np.argmax(stats[1:, cv2.CC_STAT_AREA]))
+        rgba[:, :, 3][(labels != keep) & (labels != 0)] = 0
     face = find_face(np.array(img), rgba[:, :, 3])
     if face is None:
         # Fall back to the top of the silhouette: assume the head is the top 1/7 of the figure.
